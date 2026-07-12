@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+*.log
+.DS_Store
+coverage/
+reference/real-listings.json
+data/
+*.ndjson
+*.csv
+!test/**/*.csv
+!test/**/*.ndjson

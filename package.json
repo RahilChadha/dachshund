@@ -1,0 +1,34 @@
+{
+  "name": "dachshund",
+  "version": "0.1.0",
+  "description": "Mini medallion-architecture listings pipeline (bronze/silver/gold) for vehicle data — interview prep modeled on Cardog's Crawldog.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "capture:reference": "tsx scripts/capture-reference.ts",
+    "db:apply-schema": "tsx src/db/apply-schema.ts",
+    "generate": "tsx src/generator/index.ts",
+    "extract": "tsx src/pipeline/extract.ts",
+    "replay": "tsx src/pipeline/extract.ts --replay"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/lib-storage": "^3.750.0",
+    "@cardog/corgi": "^2.0.4",
+    "dotenv": "^16.4.5",
+    "pg": "^8.13.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4"
+  }
+}
