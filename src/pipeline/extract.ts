@@ -128,16 +128,6 @@ async function main() {
     return;
   }
 
-  if (process.argv.includes("--replay")) {
-    // Phase 1 stub: bronze is already the append-only, replayable source of
-    // truth (nothing here mutates it). Full "reprocess bronze through
-    // validate/normalize/dedupe/load" replay logic lands in Phase 2 once
-    // those stages exist — this just confirms what's available to replay.
-    console.log("Replay (Phase 2 will add reprocessing here). Current bronze contents:");
-    await listBronze();
-    return;
-  }
-
   const datePartition = todayPartition();
   console.log(`Landing bronze batches under date=${datePartition}`);
 

@@ -108,8 +108,13 @@ async function main() {
       const base = rng.choice(overlapPool);
       // Contradictory: different year (+/-1) and a materially different price,
       // same VIN — exactly the conflict the dedupe/survivorship stage must resolve.
+      // stockNumber is deliberately NOT inherited from base: this is a distinct
+      // cross-posted ad on a different platform, with its own listing id — reusing
+      // base.stockNumber would make two different Source B iterations that happen
+      // to sample the same overlap-pool entry collide on (source, source_listing_id).
       listing = {
         ...base,
+        stockNumber: `STK${args.countA + i}${rng.int(100, 999)}`,
         year: base.year + (rng.bool(0.5) ? 1 : -1),
         price: Math.round((base.price * rng.float(0.85, 1.15)) / 100) * 100,
       };
