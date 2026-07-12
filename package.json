@@ -12,7 +12,8 @@
     "db:apply-schema": "tsx src/db/apply-schema.ts",
     "generate": "tsx src/generator/index.ts",
     "extract": "tsx src/pipeline/extract.ts",
-    "replay": "tsx src/pipeline/extract.ts --replay"
+    "pipeline": "tsx src/pipeline/run.ts",
+    "replay": "tsx src/pipeline/run.ts"
   },
   "engines": {
     "node": ">=20"
@@ -21,12 +22,15 @@
     "@aws-sdk/client-s3": "^3.750.0",
     "@aws-sdk/lib-storage": "^3.750.0",
     "@cardog/corgi": "^2.0.4",
+    "csv-parse": "^7.0.1",
     "dotenv": "^16.4.5",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "pg-copy-streams": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
     "@types/pg": "^8.11.10",
+    "@types/pg-copy-streams": "^1.2.5",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^3.0.4"
