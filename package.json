@@ -13,7 +13,11 @@
     "generate": "tsx src/generator/index.ts",
     "extract": "tsx src/pipeline/extract.ts",
     "pipeline": "tsx src/pipeline/run.ts",
-    "replay": "tsx src/pipeline/run.ts"
+    "replay": "tsx src/pipeline/run.ts",
+    "db:apply-phase3": "tsx src/db/apply-phase3-migration.ts",
+    "benchmark:load": "tsx scripts/benchmark-load.ts",
+    "benchmark:queries": "tsx scripts/benchmark-queries.ts",
+    "metrics:report": "tsx scripts/metrics-report.ts"
   },
   "engines": {
     "node": ">=20"

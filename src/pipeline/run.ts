@@ -9,6 +9,7 @@
  *
  * Usage: npm run pipeline -- --date 2026-07-12
  */
+import { randomUUID } from "node:crypto";
 import { createDecoder } from "@cardog/corgi";
 import { getPool } from "../db/client.js";
 import { listManifests, readBatch } from "./bronze-reader.js";
@@ -25,6 +26,7 @@ const SOURCES: SourceName[] = ["dealer-feed-a", "marketplace-b"];
 
 async function recordPipelineRun(
   pool: ReturnType<typeof getPool>,
+  runUuid: string,
   stage: string,
   source: string,
   batchId: string,
@@ -36,9 +38,9 @@ async function recordPipelineRun(
   extraMetrics: Record<string, number> = {}
 ) {
   const res = await pool.query<{ id: number }>(
-    `INSERT INTO pipeline_runs (stage, source, batch_id, rows_in, rows_out, rejects, started_at, finished_at, duration_ms)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
-    [stage, source, batchId, rowsIn, rowsOut, rejects, startedAt, finishedAt, finishedAt.getTime() - startedAt.getTime()]
+    `INSERT INTO pipeline_runs (run_id, stage, source, batch_id, rows_in, rows_out, rejects, started_at, finished_at, duration_ms)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+    [runUuid, stage, source, batchId, rowsIn, rowsOut, rejects, startedAt, finishedAt, finishedAt.getTime() - startedAt.getTime()]
   );
   const runId = res.rows[0]!.id;
   for (const [name, value] of Object.entries(extraMetrics)) {
@@ -78,6 +80,8 @@ function parseArgs(argv: string[]) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const pool = getPool();
+  const runUuid = randomUUID();
+  console.log(`run_id: ${runUuid}`);
 
   const allNormalized: NormalizedRecord[] = [];
   const perSourceStats = new Map<
@@ -120,10 +124,10 @@ async function main() {
         }
 
         const finishedAt = new Date();
-        await recordPipelineRun(pool, "validate", source, batch.key, raw.length, valid.length, quarantined.length, startedAt, finishedAt, {
+        await recordPipelineRun(pool, runUuid, "validate", source, batch.key, raw.length, valid.length, quarantined.length, startedAt, finishedAt, {
           rejection_rate: raw.length > 0 ? quarantined.length / raw.length : 0,
         });
-        await recordPipelineRun(pool, "normalize", source, batch.key, valid.length, normalized.length, 0, startedAt, finishedAt);
+        await recordPipelineRun(pool, runUuid, "normalize", source, batch.key, valid.length, normalized.length, 0, startedAt, finishedAt);
 
         console.log(`  ${source} ${batch.key}: ${raw.length} in, ${valid.length} valid, ${quarantined.length} quarantined`);
       }
@@ -141,7 +145,7 @@ async function main() {
   const candidates = dedupeByVin(allNormalized);
   const dedupeMetrics = computeDuplicateConflictMetrics(candidates);
   const dedupeFinish = new Date();
-  await recordPipelineRun(pool, "dedupe", "all", args.date ?? "all", allNormalized.length, candidates.size, 0, dedupeStart, dedupeFinish, {
+  await recordPipelineRun(pool, runUuid, "dedupe", "all", args.date ?? "all", allNormalized.length, candidates.size, 0, dedupeStart, dedupeFinish, {
     unique_vins: candidates.size,
     vins_within_source_duplicate: dedupeMetrics.vinsWithinSourceDuplicate,
     vins_cross_source_duplicate: dedupeMetrics.vinsCrossSourceDuplicate,
@@ -165,7 +169,7 @@ async function main() {
   });
   await decoder.close();
   const enrichFinish = new Date();
-  await recordPipelineRun(pool, "enrich", "all", args.date ?? "all", enrichMetrics.uniqueVins, vehicles.length, 0, enrichStart, enrichFinish, {
+  await recordPipelineRun(pool, runUuid, "enrich", "all", args.date ?? "all", enrichMetrics.uniqueVins, vehicles.length, 0, enrichStart, enrichFinish, {
     unique_prefixes: enrichMetrics.uniquePrefixes,
     cache_hits: enrichMetrics.cacheHits,
     corgi_calls_made: enrichMetrics.corgiCallsMade,
@@ -185,7 +189,7 @@ async function main() {
     client.release();
   }
   const loadFinish = new Date();
-  await recordPipelineRun(pool, "load", "all", args.date ?? "all", vehicles.length, loadMetrics.vehiclesUpserted, 0, loadStart, loadFinish, {
+  await recordPipelineRun(pool, runUuid, "load", "all", args.date ?? "all", vehicles.length, loadMetrics.vehiclesUpserted, 0, loadStart, loadFinish, {
     vehicles_upserted: loadMetrics.vehiclesUpserted,
     listings_upserted: loadMetrics.listingsUpserted,
     price_history_rows_written: loadMetrics.priceHistoryRowsWritten,
@@ -194,7 +198,7 @@ async function main() {
 
   for (const [source, stats] of perSourceStats) {
     if (stats.rowsIn === 0) continue;
-    await recordPipelineRun(pool, "summary", source, args.date ?? "all", stats.rowsIn, stats.validated, stats.quarantined, dedupeStart, loadFinish, {
+    await recordPipelineRun(pool, runUuid, "summary", source, args.date ?? "all", stats.rowsIn, stats.validated, stats.quarantined, dedupeStart, loadFinish, {
       field_completeness_price_pct: stats.rowsIn > 0 ? stats.priceNonNull / stats.rowsIn : 0,
       field_completeness_odometer_pct: stats.rowsIn > 0 ? stats.odometerNonNull / stats.rowsIn : 0,
       trim_normalization_coverage: stats.trimNonNull > 0 ? stats.trimMatched / stats.trimNonNull : 0,
