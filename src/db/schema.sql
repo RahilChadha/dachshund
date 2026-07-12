@@ -55,18 +55,20 @@ CREATE TABLE listings (
     listed_at             TIMESTAMPTZ,
     delisted_at           TIMESTAMPTZ,
     raw_payload           JSONB NOT NULL,            -- the original (filthy) record, kept for audits/replays without needing bronze
+    make                  TEXT,                      -- denormalized from vehicles (decode-trusted), so gold queries don't need a join — see phase3-migration.sql
+    model                 TEXT,
+    model_year            SMALLINT,
     created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (source, source_listing_id)
 );
 
 CREATE INDEX idx_listings_vin ON listings (vin);
--- Composite index for the market-stats gold queries (make/model/year/province
--- rollups) — added in Phase 3 alongside the before/after EXPLAIN ANALYZE benchmark,
--- left commented here as a placeholder for the design decision:
--- CREATE INDEX idx_listings_make_model_year_province ON listings (make, model, model_year, province);
--- Partial index for the common "active listings only" query shape:
--- CREATE INDEX idx_listings_active ON listings (vin) WHERE status = 'active';
+-- Composite index for the make/model/year/province filter shape (gold
+-- market-stats queries and most "browse listings" access patterns) and a
+-- partial index for the common "active listings only" case — both created
+-- in src/db/phase3-migration.sql alongside the before/after EXPLAIN ANALYZE
+-- benchmark that justified them.
 
 -- ---------------------------------------------------------------------------
 -- price_history: append-only. A new row is written whenever the SAME VIN is
