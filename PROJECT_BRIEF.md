@@ -1,6 +1,6 @@
 # PROJECT BRIEF: DACHSHUND
 
-A mini version of Cardog's 'Crawldog' listings pipeline, built as interview prep for a data engineering role at Cardog (Canadian automotive data startup, stack: TypeScript/Node, Cloudflare Workers, Postgres/Neon, their open-source VIN decoder @cardog/corgi). Named Dachshund in the spirit of Corgi and Crawldog. Goal: demonstrate every skill in their JD — ETL pipelines for vehicle data ingestion, data quality and normalization at scale, deduplication, PostgreSQL optimization, strong SQL.
+A mini version of Cardog's 'Crawldog' listings pipeline (Canadian automotive data startup, stack: TypeScript/Node, Cloudflare Workers, Postgres/Neon, their open-source VIN decoder @cardog/corgi). Named Dachshund in the spirit of Corgi and Crawldog. Goal: ETL pipelines for vehicle data ingestion, data quality and normalization at scale, deduplication, PostgreSQL optimization, strong SQL.
 
 ARCHITECTURE (medallion): Bronze = raw immutable NDJSON/CSV batches in Cloudflare R2, partitioned by source/date, never edited, replayable. Silver = validated/normalized/deduplicated tables in Neon Postgres: vehicles (one row per physical vehicle, keyed by VIN), listings (one row per listing observation), price_history, quarantine (rejected records with reason codes), pipeline_runs + quality_metrics (observability). Gold = materialized views for market stats (avg/median price by make/model/year/province, price-drop analytics via window functions).
 
@@ -33,6 +33,6 @@ CHECKPOINT: show per-source quality metrics from the run, summarize, WAIT.
 
 **PHASE 3 (load, optimize, observe, story):**
 COPY vs row-insert benchmark with timings; 5 realistic queries benchmarked with EXPLAIN ANALYZE before/after composite index (make, model, year, province), partial index on active listings, and materialized gold views — all recorded in BENCHMARKS.md as a before/after table; price-drop analytics with LAG() window function; CLI metrics report; full README (architecture diagram, benchmarks, metrics, judgment section). Stretch if smooth: Transport Canada recalls enrichment joined by make/model/year.
-FINAL: complete project summary + a list of every design decision that should be defensible in an interview, phrased as Q&A.
+FINAL: complete project summary + a list of every design decision worth documenting, phrased as Q&A.
 
 Throughout: ask before any destructive operation, explain WHY at each major step in one or two sentences — this is a learning-oriented build.

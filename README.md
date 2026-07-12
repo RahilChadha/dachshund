@@ -1,12 +1,12 @@
 # Dachshund
 
-A mini version of Cardog's "Crawldog" listings pipeline — built as interview prep for a data engineering role at [Cardog](https://cardog.app), a Canadian automotive data startup. Named Dachshund in the spirit of their VIN decoder, [`@cardog/corgi`](https://github.com/cardog-ai/corgi).
+A mini version of Cardog's "Crawldog" listings pipeline — a small-scale medallion-architecture ETL pipeline for vehicle listing data. Named Dachshund in the spirit of their VIN decoder, [`@cardog/corgi`](https://github.com/cardog-ai/corgi).
 
 **Status: Phase 1 complete** (foundations + extract). Phases 2 (transform: validate/normalize/dedupe/enrich) and 3 (load, optimize, benchmarks, gold views) are not yet built — this README will grow with them. See `PROJECT_BRIEF.md` for the full spec driving this build.
 
 ## Why this exists
 
-Cardog's JD asks for ETL pipelines for vehicle data ingestion, data quality/normalization at scale, deduplication, and PostgreSQL optimization. Rather than talk about those skills in an interview, this is a working (small-scale) version of the same problem: two messy, contradictory vehicle-listing feeds in, one trustworthy Postgres dataset out.
+This project exercises the core mechanics of a real vehicle-listings pipeline: ETL for vehicle data ingestion, data quality and normalization at scale, deduplication, and PostgreSQL optimization. It's a working (small-scale) version of a real problem: two messy, contradictory vehicle-listing feeds in, one trustworthy Postgres dataset out.
 
 ## Architecture (medallion)
 
@@ -70,7 +70,7 @@ One-time, budget-capped script: makes **exactly 1** live call to `GET /v1/listin
 
 **What we learned from the real data:**
 - The public docs at docs.cardog.app undersell the schema — the *actual* response includes far more than `{id, vin, price, make, model, year, ...}`. Real listings carry **`latitude`/`longitude` directly, plus a full structured `location` object** (street, city, province, postal code, its own lat/lng) — coordinates are very much present, contrary to what the docs implied.
-- Also present: `verificationStatus`/`verifiedAt`, `previousPrice`/`priceChangedAt` (i.e. Cardog already tracks price history at the listing level — validated the `price_history` table design), decoded-reference fields like `makeRef`/`modelRef`/`bodyStyleRef` (suggests an internal canonical taxonomy, which is exactly what corgi + our `vehicles` table role-plays here), and rich vehicle attributes (`cylinders`, `shippingWeight`, `gvwr`, etc.) that this project's generator doesn't attempt to reproduce — out of scope for the interview-prep goal.
+- Also present: `verificationStatus`/`verifiedAt`, `previousPrice`/`priceChangedAt` (i.e. Cardog already tracks price history at the listing level — validated the `price_history` table design), decoded-reference fields like `makeRef`/`modelRef`/`bodyStyleRef` (suggests an internal canonical taxonomy, which is exactly what corgi + our `vehicles` table role-plays here), and rich vehicle attributes (`cylinders`, `shippingWeight`, `gvwr`, etc.) that this project's generator doesn't attempt to reproduce — out of scope for this project.
 - **One real bug found in production**: the live `/v1/listings/search` call initially 500'd with `DatabaseError` — their backend was passing a JS `Date.toString()` (e.g. `"Thu Jul 09 2026 12:19:26 GMT+0000 (Coordinated Universal Time)"`) into a SQL query filtering `vehicle_media.updated_at`, instead of an ISO timestamp. A retry succeeded (looked transient rather than deterministic). Total spend: **2 of the allowed 10 calls**, 0 calls since — the schema is now fully derived from the saved reference file.
 
 ### 3. Neon schema (`src/db/schema.sql`)
@@ -116,7 +116,7 @@ Object keys are deterministic (source + date + batch index), so re-running extra
 
 ## Data sourcing judgment (preliminary — full version lands in Phase 3)
 
-Real listings at any real volume are proprietary — that's Crawldog's actual business, and 1M+ scraped real listings isn't something to casually stand up for an interview project. The approach here is **synthetic-but-schema-accurate**: the generator's field names, VIN structure, and data shape are calibrated against one real, budget-capped pull from Cardog's own API (not guessed from docs, which turned out to undersell the real schema). The engineering problem this project demonstrates isn't "can you scrape car listings" — it's "can you build a pipeline that doesn't trust what it's fed," which is exactly as true of synthetic filth as it is of real-world scraped inconsistency. Real government data (Transport Canada / NHTSA recalls) is planned as a Phase 3 stretch to add one real, unfiltered, un-synthetic data source into the mix.
+Real listings at any real volume are proprietary — that's Crawldog's actual business, and 1M+ scraped real listings isn't something to casually stand up here. The approach here is **synthetic-but-schema-accurate**: the generator's field names, VIN structure, and data shape are calibrated against one real, budget-capped pull from Cardog's own API (not guessed from docs, which turned out to undersell the real schema). The engineering problem this project demonstrates isn't "can you scrape car listings" — it's "can you build a pipeline that doesn't trust what it's fed," which is exactly as true of synthetic filth as it is of real-world scraped inconsistency. Real government data (Transport Canada / NHTSA recalls) is planned as a Phase 3 stretch to add one real, unfiltered, un-synthetic data source into the mix.
 
 ## Running it
 
@@ -133,4 +133,4 @@ npm test                    # vitest — VIN check-digit + filth injection tests
 ## What's next
 
 - **Phase 2**: validate (quarantine + reason codes) → normalize (price/units/trim/French-field modules, each unit-tested) → dedupe (VIN survivorship) → enrich (corgi decode + `decode_cache`) → observe (`pipeline_runs`/`quality_metrics` populated for real). Idempotency proof (same batch twice, counts don't double) and `npm run replay` from bronze.
-- **Phase 3**: COPY-vs-row-insert benchmark, EXPLAIN ANALYZE before/after indexing (`BENCHMARKS.md`), gold materialized views, price-drop `LAG()` analytics, CLI metrics report, full judgment section, and a final Q&A-style list of every design decision worth defending in an interview.
+- **Phase 3**: COPY-vs-row-insert benchmark, EXPLAIN ANALYZE before/after indexing (`BENCHMARKS.md`), gold materialized views, price-drop `LAG()` analytics, CLI metrics report, full judgment section, and a final Q&A-style list of every design decision worth documenting.

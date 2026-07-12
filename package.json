@@ -1,7 +1,7 @@
 {
   "name": "dachshund",
   "version": "0.1.0",
-  "description": "Mini medallion-architecture listings pipeline (bronze/silver/gold) for vehicle data — interview prep modeled on Cardog's Crawldog.",
+  "description": "Mini medallion-architecture listings pipeline (bronze/silver/gold) for vehicle data, modeled on Cardog's Crawldog architecture.",
   "type": "module",
   "private": true,
   "scripts": {
