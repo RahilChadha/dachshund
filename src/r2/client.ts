@@ -12,6 +12,12 @@ export function getR2Client(): S3Client {
     client = new S3Client({
       region: "auto",
       endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      // Path-style (bucket in the URL path, not as a subdomain) avoids
+      // depending on wildcard DNS/TLS for <bucket>.<account>.r2... — hit an
+      // intermittent ENOTFOUND on the virtual-hosted-style hostname that
+      // path-style sidesteps entirely. Cloudflare's own R2 docs recommend
+      // this setting for S3-compatible SDKs.
+      forcePathStyle: true,
       credentials: {
         accessKeyId: process.env.R2_ACCESS_KEY_ID!,
         secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
