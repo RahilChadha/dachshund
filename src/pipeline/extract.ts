@@ -10,6 +10,9 @@
  * Usage:
  *   npm run extract                      # land data/ into R2 under today's date partition
  *   npm run extract -- --list            # list existing bronze objects + row counts, don't upload
+ *   npm run extract -- --partition <p>   # override the partition label (e.g. to land a
+ *                                         # differently-sized dataset without colliding with
+ *                                         # or deleting an existing date partition's batches)
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { gzipSync } from "node:zlib";
@@ -128,7 +131,8 @@ async function main() {
     return;
   }
 
-  const datePartition = todayPartition();
+  const partitionFlagIndex = process.argv.indexOf("--partition");
+  const datePartition = partitionFlagIndex === -1 ? todayPartition() : process.argv[partitionFlagIndex + 1]!;
   console.log(`Landing bronze batches under date=${datePartition}`);
 
   let grandTotalObjects = 0;
