@@ -10,6 +10,13 @@ ALTER TABLE listings ADD COLUMN IF NOT EXISTS make TEXT;
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS model_year SMALLINT;
 
+-- Groups every pipeline_runs row from one `npm run pipeline` execution
+-- together, so metrics reporting can aggregate "this run" instead of
+-- accidentally summing stage rows across multiple historical attempts
+-- (e.g. a crashed run retried after a bug fix).
+ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS run_id UUID;
+CREATE INDEX IF NOT EXISTS idx_pipeline_runs_run_id ON pipeline_runs (run_id);
+
 -- Idempotent backfill: only touches rows that haven't been filled yet, so
 -- re-running this migration (or a future replay) doesn't redo the work.
 UPDATE listings
@@ -44,7 +51,10 @@ SELECT
   province,
   count(*) AS listing_count,
   round(avg(price_cents) / 100.0, 2) AS avg_price_cad,
-  round(percentile_cont(0.5) WITHIN GROUP (ORDER BY price_cents) / 100.0, 2) AS median_price_cad,
+  -- percentile_cont() returns double precision over a bigint column
+  -- (no numeric/interval fast path), and round(double precision, int)
+  -- doesn't exist in Postgres — needs an explicit numeric cast first.
+  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY price_cents))::numeric / 100.0, 2) AS median_price_cad,
   round(avg(odometer_km)) AS avg_odometer_km
 FROM listings
 WHERE status = 'active' AND price_cents IS NOT NULL AND make IS NOT NULL
