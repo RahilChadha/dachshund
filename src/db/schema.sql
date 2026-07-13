@@ -54,7 +54,13 @@ CREATE TABLE listings (
     year_conflict         BOOLEAN NOT NULL DEFAULT false, -- true if source year disagreed with corgi's VIN decode (decode wins, this just flags it)
     listed_at             TIMESTAMPTZ,
     delisted_at           TIMESTAMPTZ,
-    raw_payload           JSONB NOT NULL,            -- the original (filthy) record, kept for audits/replays without needing bronze
+    -- No raw_payload column: originally stored here (the full original record,
+    -- ~300-400 bytes/row), but at ~921K listings that alone was 300MB+ against
+    -- a 512MB Neon free-tier project cap. Bronze in R2 is already the
+    -- immutable, replayable copy of every raw record — storing it a second
+    -- time in Postgres was redundant from day one; the storage cap just made
+    -- that cost impossible to ignore. Dropped in production via a live
+    -- ALTER TABLE (see git history) once the pipeline hit the real limit.
     make                  TEXT,                      -- denormalized from vehicles (decode-trusted), so gold queries don't need a join — see phase3-migration.sql
     model                 TEXT,
     model_year            SMALLINT,

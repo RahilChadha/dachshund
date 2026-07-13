@@ -43,7 +43,7 @@ const VEHICLE_STAGING_COLUMNS = [
 const LISTING_STAGING_COLUMNS = [
   "vin", "source", "source_listing_id", "batch_id", "price_cents", "currency",
   "odometer_km", "trim_raw", "province", "city", "latitude", "longitude",
-  "status", "year_conflict", "listed_at", "raw_payload", "make", "model", "model_year",
+  "status", "year_conflict", "listed_at", "make", "model", "model_year",
 ];
 
 export async function loadEnrichedVehicles(client: PoolClient, vehicles: EnrichedVehicle[]): Promise<LoadMetrics> {
@@ -61,7 +61,7 @@ export async function loadEnrichedVehicles(client: PoolClient, vehicles: Enriche
         vin CHAR(17), source TEXT, source_listing_id TEXT, batch_id TEXT,
         price_cents BIGINT, currency TEXT, odometer_km INTEGER, trim_raw TEXT,
         province TEXT, city TEXT, latitude NUMERIC(9,6), longitude NUMERIC(9,6),
-        status TEXT, year_conflict BOOLEAN, listed_at TIMESTAMPTZ, raw_payload JSONB,
+        status TEXT, year_conflict BOOLEAN, listed_at TIMESTAMPTZ,
         make TEXT, model TEXT, model_year SMALLINT
       ) ON COMMIT DROP
     `);
@@ -92,7 +92,7 @@ export async function loadEnrichedVehicles(client: PoolClient, vehicles: Enriche
           v.vin, listing.source, sourceListingId, listing.batchId,
           listing.priceCents, "CAD", listing.odometerKm, listing.trim, listing.province, listing.city,
           listing.latitude, listing.longitude, listing.status ?? "active", listing.yearConflict,
-          listing.listedAt, listing.raw,
+          listing.listedAt,
           // Denormalized from the enriched (decode-trusted) vehicle, not the
           // raw source claim, so gold queries filtering by make/model/year
           // reflect corgi's decode rather than a dealer's possibly-wrong entry.
@@ -128,8 +128,8 @@ export async function loadEnrichedVehicles(client: PoolClient, vehicles: Enriche
     `);
 
     const listingUpsert = await client.query(`
-      INSERT INTO listings (vin, source, source_listing_id, batch_id, price_cents, currency, odometer_km, trim_raw, province, city, latitude, longitude, status, year_conflict, listed_at, raw_payload, make, model, model_year)
-      SELECT vin, source, source_listing_id, batch_id, price_cents, currency, odometer_km, trim_raw, province, city, latitude, longitude, status, year_conflict, listed_at, raw_payload, make, model, model_year
+      INSERT INTO listings (vin, source, source_listing_id, batch_id, price_cents, currency, odometer_km, trim_raw, province, city, latitude, longitude, status, year_conflict, listed_at, make, model, model_year)
+      SELECT vin, source, source_listing_id, batch_id, price_cents, currency, odometer_km, trim_raw, province, city, latitude, longitude, status, year_conflict, listed_at, make, model, model_year
       FROM staging_listings
       ON CONFLICT (source, source_listing_id) DO UPDATE SET
         batch_id = EXCLUDED.batch_id,
@@ -143,7 +143,6 @@ export async function loadEnrichedVehicles(client: PoolClient, vehicles: Enriche
         status = EXCLUDED.status,
         year_conflict = EXCLUDED.year_conflict,
         delisted_at = CASE WHEN EXCLUDED.status = 'removed' AND listings.status <> 'removed' THEN now() ELSE listings.delisted_at END,
-        raw_payload = EXCLUDED.raw_payload,
         make = COALESCE(EXCLUDED.make, listings.make),
         model = COALESCE(EXCLUDED.model, listings.model),
         model_year = COALESCE(EXCLUDED.model_year, listings.model_year),
