@@ -9,7 +9,7 @@
  *
  * Usage: npm run pipeline -- --date 2026-07-12
  */
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { createDecoder } from "@cardog/corgi";
 import { getPool } from "../db/client.js";
 import { listManifests, readBatch } from "./bronze-reader.js";
@@ -51,6 +51,18 @@ async function recordPipelineRun(
   }
 }
 
+/**
+ * content_hash makes this idempotent: replaying the same bronze batch
+ * re-validates the same records and produces the same rejects, so without
+ * a dedup key every retry/replay would duplicate the whole quarantine set
+ * (this is exactly what happened across several retried runs before this
+ * was added — quarantine grew to 3x its real size purely from re-running
+ * validate on already-quarantined batches).
+ */
+function quarantineContentHash(raw: unknown, reasonCodes: string[]): string {
+  return createHash("md5").update(JSON.stringify(raw) + "|" + reasonCodes.join(",")).digest("hex");
+}
+
 async function insertQuarantineBatch(pool: ReturnType<typeof getPool>, records: QuarantinedRecord[]) {
   const CHUNK = 500;
   for (let i = 0; i < records.length; i += CHUNK) {
@@ -58,12 +70,13 @@ async function insertQuarantineBatch(pool: ReturnType<typeof getPool>, records: 
     const values: string[] = [];
     const params: unknown[] = [];
     chunk.forEach((r, idx) => {
-      const base = idx * 4;
-      values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`);
-      params.push(r.source, r.batchId, JSON.stringify(r.raw), r.reasonCodes);
+      const base = idx * 5;
+      values.push(`($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`);
+      params.push(r.source, r.batchId, JSON.stringify(r.raw), r.reasonCodes, quarantineContentHash(r.raw, r.reasonCodes));
     });
     await pool.query(
-      `INSERT INTO quarantine (source, batch_id, raw_record, reason_codes) VALUES ${values.join(",")}`,
+      `INSERT INTO quarantine (source, batch_id, raw_record, reason_codes, content_hash) VALUES ${values.join(",")}
+       ON CONFLICT (source, batch_id, content_hash) DO NOTHING`,
       params
     );
   }
