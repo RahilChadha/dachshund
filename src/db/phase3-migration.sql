@@ -1,11 +1,20 @@
--- Phase 3: gold-query optimization. Adds a deliberate denormalization
--- (make/model/model_year copied onto listings) so the composite index that
--- serves the most common query shape (filter by make/model/year/province)
--- doesn't require a join through vehicles on every lookup. This was flagged
--- as a placeholder decision back in schema.sql during Phase 1 — the
--- normalized-only version was kept until there was a real query + EXPLAIN
--- ANALYZE to justify the trade-off with numbers, not just intuition.
+-- Phase 3 pre-load migration: schema changes only. Index creation and
+-- materialized views are deliberately NOT here — see phase3-post-load.sql.
+--
+-- Building indexes incrementally during a 921K-row bulk INSERT (maintaining
+-- every index on every row as it's inserted) costs meaningfully more
+-- transient space than bulk-building the same index once after the data
+-- exists — the difference was the last few percent that made the load fit
+-- inside Neon's 512MB free-tier cap. This is also just the correct order for
+-- an honest before/after index benchmark: the "before" EXPLAIN ANALYZE has
+-- to run against a real index-free table, not one that happens to have the
+-- index already built during load.
 
+-- Deliberate denormalization: make/model/model_year copied onto listings so
+-- the composite index (added post-load) serves the make/model/year/province
+-- filter shape without a join through vehicles. Flagged as a placeholder
+-- decision back in schema.sql during Phase 1 — kept normalized-only until
+-- there was a real query + EXPLAIN ANALYZE to justify the trade-off.
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS make TEXT;
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE listings ADD COLUMN IF NOT EXISTS model_year SMALLINT;
@@ -19,74 +28,9 @@ CREATE INDEX IF NOT EXISTS idx_pipeline_runs_run_id ON pipeline_runs (run_id);
 
 -- Idempotent backfill: only touches rows that haven't been filled yet, so
 -- re-running this migration (or a future replay) doesn't redo the work.
+-- (No-op on a fresh load, since load.ts now populates make/model/model_year
+-- directly — kept for safety against older rows loaded before that change.)
 UPDATE listings
 SET make = v.make, model = v.model, model_year = v.model_year
 FROM vehicles v
 WHERE v.vin = listings.vin AND listings.make IS NULL;
-
--- Composite index for the make/model/year/province filter shape used by
--- the gold market-stats queries and most "browse listings" access patterns.
-CREATE INDEX IF NOT EXISTS idx_listings_make_model_year_province
-  ON listings (make, model, model_year, province);
-
--- Partial index: most queries only care about currently-active listings,
--- and 'active' status listings are the overwhelming minority of total row
--- churn over time (removed listings pile up but are rarely queried) — a
--- partial index keeps the index small and fast for the common case.
-CREATE INDEX IF NOT EXISTS idx_listings_active
-  ON listings (vin)
-  WHERE status = 'active';
-
--- ---------------------------------------------------------------------------
--- Gold layer: materialized views. Refreshed on demand (npm run gold:refresh),
--- not on every write — market stats don't need to be real-time-consistent.
--- ---------------------------------------------------------------------------
-
-DROP MATERIALIZED VIEW IF EXISTS gold_market_stats;
-CREATE MATERIALIZED VIEW gold_market_stats AS
-SELECT
-  make,
-  model,
-  model_year,
-  province,
-  count(*) AS listing_count,
-  round(avg(price_cents) / 100.0, 2) AS avg_price_cad,
-  -- percentile_cont() returns double precision over a bigint column
-  -- (no numeric/interval fast path), and round(double precision, int)
-  -- doesn't exist in Postgres — needs an explicit numeric cast first.
-  round((percentile_cont(0.5) WITHIN GROUP (ORDER BY price_cents))::numeric / 100.0, 2) AS median_price_cad,
-  round(avg(odometer_km)) AS avg_odometer_km
-FROM listings
-WHERE status = 'active' AND price_cents IS NOT NULL AND make IS NOT NULL
-GROUP BY make, model, model_year, province;
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_gold_market_stats_key
-  ON gold_market_stats (make, model, model_year, province);
-
--- Price-drop analytics: LAG() over each listing's own price_history to find
--- the most recent drop (previous price -> current price) per listing.
-DROP MATERIALIZED VIEW IF EXISTS gold_price_drops;
-CREATE MATERIALIZED VIEW gold_price_drops AS
-WITH price_changes AS (
-  SELECT
-    listing_id,
-    vin,
-    price_cents,
-    observed_at,
-    LAG(price_cents) OVER (PARTITION BY listing_id ORDER BY observed_at) AS previous_price_cents,
-    LAG(observed_at) OVER (PARTITION BY listing_id ORDER BY observed_at) AS previous_observed_at
-  FROM price_history
-)
-SELECT
-  listing_id,
-  vin,
-  previous_price_cents,
-  price_cents AS current_price_cents,
-  (previous_price_cents - price_cents) AS price_drop_cents,
-  round(100.0 * (previous_price_cents - price_cents) / NULLIF(previous_price_cents, 0), 2) AS price_drop_pct,
-  previous_observed_at,
-  observed_at AS current_observed_at
-FROM price_changes
-WHERE previous_price_cents IS NOT NULL AND price_cents < previous_price_cents;
-
-CREATE INDEX IF NOT EXISTS idx_gold_price_drops_vin ON gold_price_drops (vin);
