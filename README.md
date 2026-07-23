@@ -1,6 +1,6 @@
-# Dachshund
+# LotWatch
 
-A mini version of Cardog's "Crawldog" listings pipeline — a small-scale medallion-architecture ETL pipeline for vehicle listing data. Named Dachshund in the spirit of their VIN decoder, [`@cardog/corgi`](https://github.com/cardog-ai/corgi).
+A mini version of Cardog's "Crawldog" listings pipeline — a small-scale medallion-architecture ETL pipeline for vehicle listing data.  [`@cardog/corgi`](https://github.com/cardog-ai/corgi).
 
 **Status: complete.** Bronze (R2 extract) → Silver (validate/normalize/dedupe/enrich/load into Neon Postgres) → Gold (materialized views) all built, tested, and run end-to-end against a real ~550K-record synthetic dataset. See `BENCHMARKS.md` for load/query performance numbers and `PROJECT_BRIEF.md` for the full spec driving this build.
 
